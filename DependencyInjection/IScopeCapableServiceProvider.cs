@@ -1,6 +1,6 @@
 ﻿namespace DependencyInjection;
 
-public interface IScopeCapableServiceProvider
+public interface IScopeCapableServiceProvider : IServiceProvider
 {
     public IScopedServiceProvider CreateScope();
 }

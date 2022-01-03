@@ -4,6 +4,6 @@ public static class ServiceCollectionBuildExtensions
 {
     public static IServiceProvider BuildServiceProvider(this IServiceCollection services)
     {
-        return new ServiceProvider(services);
+        return new LegacyServiceProvider(services);
     }
 }

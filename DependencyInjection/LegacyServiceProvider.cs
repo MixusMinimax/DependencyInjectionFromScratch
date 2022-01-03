@@ -1,45 +1,24 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using System.Linq.Expressions;
-using System.Reflection;
+using System.Text.RegularExpressions;
 using DependencyInjection.Attributes;
 
 namespace DependencyInjection;
 
-public sealed class ServiceProvider : IScopeCapableServiceProvider
+[Obsolete]
+public sealed class LegacyServiceProvider : IScopeCapableServiceProvider
 {
     private static readonly Guid RootScope = Guid.Empty;
     private readonly Dictionary<Guid, Dictionary<Type, ServiceInstance>> _serviceCache;
+
     private readonly Dictionary<Type, ServiceDescriptor> _serviceDefinitions;
 
-    private readonly Dictionary<Type, (ParameterInfo[] Parameters, Func<object[], object> Constructor)>
-        _implementationFactories = new();
-
-    public ServiceProvider(IServiceCollection serviceCollection)
+    public LegacyServiceProvider(IServiceCollection serviceCollection)
     {
         _serviceDefinitions = serviceCollection.ToDictionary(e => e.ServiceType);
         _serviceCache = new Dictionary<Guid, Dictionary<Type, ServiceInstance>>
         {
             [RootScope] = new()
         };
-        foreach (var service in _serviceDefinitions.Values)
-        {
-            var implementationType = service.ImplementationType;
-            if (implementationType is null) continue;
-            var constructor = implementationType.GetConstructors().First(info => info.IsPublic);
-            var dependencies = constructor.GetParameters();
-            var parameters = dependencies
-                .Select(e => Expression.Parameter(e.ParameterType, e.Name)).ToArray();
-            var inner = Expression.Lambda(Expression.New(constructor, parameters), parameters);
-            var args = Expression.Parameter(typeof(object[]), "args");
-            var body = Expression.Invoke(inner,
-                parameters.Select((p, i) =>
-                    Expression.Convert(Expression.ArrayIndex(args, Expression.Constant(i)), p.Type)).ToArray());
-            var factory = Expression.Lambda<Func<object[], object>>(body, args).Compile();
-            _implementationFactories[implementationType] = (
-                dependencies,
-                factory
-            );
-        }
     }
 
     public IScopedServiceProvider CreateScope()
@@ -112,13 +91,14 @@ public sealed class ServiceProvider : IScopeCapableServiceProvider
         return serviceInstance;
     }
 
-    private object InstantiateService(IServiceProvider services, Type implementationType, Guid scopeId)
+    private static object InstantiateService(IServiceProvider services, Type implementationType, Guid scopeId)
     {
+        // TODO: Create Factories to avoid Reflection (IL-Code generation)
+
         if (implementationType is null) throw new ArgumentNullException(nameof(implementationType));
-        if (!_implementationFactories.ContainsKey(implementationType))
-            throw new Exception($"No factory for {implementationType.Name}");
-        var (dependencies, factory) = _implementationFactories[implementationType];
-        var parameters = new object[dependencies.Length];
+        var constructor = implementationType.GetConstructors().First(info => info.IsPublic);
+        var dependencies = constructor.GetParameters();
+        var parameters = new object?[dependencies.Length];
         foreach (var parameterInfo in dependencies)
         {
             var paramType = parameterInfo.ParameterType;
@@ -127,18 +107,17 @@ public sealed class ServiceProvider : IScopeCapableServiceProvider
             {
                 param = services;
             }
-            else if (paramType.IsAssignableFrom(typeof(Guid)) &&
-                     Attribute.IsDefined(parameterInfo, typeof(ScopeIdAttribute)))
+            else if (paramType.IsAssignableFrom(typeof(Guid)) && Attribute.IsDefined(parameterInfo, typeof(ScopeIdAttribute)))
             {
                 param = scopeId;
             }
             else
             {
-                param = services.GetRequiredService(paramType);
+                param = services.GetService(paramType);
             }
         }
 
-        return factory(parameters);
+        return constructor.Invoke(parameters);
     }
 
     private void ClearCache(Guid scopeId)
@@ -148,9 +127,9 @@ public sealed class ServiceProvider : IScopeCapableServiceProvider
 
     private sealed class ScopedServiceProvider : IScopedServiceProvider
     {
-        private readonly ServiceProvider _services;
+        private readonly LegacyServiceProvider _services;
 
-        public ScopedServiceProvider(ServiceProvider services, Guid scopeId)
+        public ScopedServiceProvider(LegacyServiceProvider services, Guid scopeId)
         {
             _services = services;
             ScopeId = scopeId;
