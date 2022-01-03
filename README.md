@@ -11,8 +11,11 @@ Also, this was written in maybe seven hours, I didn't time myself.
 
 - Works with lifetimes (Transient, Scoped, Singleton)
 - Works with scopes
-- Everything is mockable
-- Dependency injection works using reflection
+- Everything is mockable (Essentially all classes implement an interface with the same name, so that you can replace anything during testing.)
+- Differend method signatures of `ServiceProvider.GetService` and `ServiceProvider.GetRequiredService` are defined as extension methods, so that all `IServiceProvider` implementations only need to implement `GetService(Type serviceType)`
+- Dependency injection works using reflection. The first public Constructor is used.
+  - The service provider itself can be injected. The static type can be anything that the current serviceProvider can be assigned to.
+  - The Guid of the current scope can be injected
 
 ### TODO
 
