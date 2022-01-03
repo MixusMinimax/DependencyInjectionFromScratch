@@ -4,7 +4,7 @@ using DependencyInjection.Attributes;
 
 namespace DependencyInjection;
 
-[Obsolete]
+[Obsolete("This uses Reflection and is slower")]
 public sealed class LegacyServiceProvider : IScopeCapableServiceProvider
 {
     private static readonly Guid RootScope = Guid.Empty;
